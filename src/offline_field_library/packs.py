@@ -180,6 +180,7 @@ def import_pack(
             license_note=source.license_note,
             notes=source.notes,
         )
+        database.unlink_source_document(source_id)
 
         status = "remote_only"
         error_message: str | None = None

@@ -393,6 +393,10 @@ class LibraryDatabase:
                 (source_id, document_id),
             )
 
+    def unlink_source_document(self, source_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM source_documents WHERE source_id = ?", (source_id,))
+
     def collection_exists(self, slug: str) -> bool:
         if not self.path.exists():
             return False
@@ -457,15 +461,39 @@ class LibraryDatabase:
             ).fetchone()[0]
         return int(documents), int(chunks), int(embedded)
 
-    def lexical_rows(self, query: str, limit: int) -> list[sqlite3.Row]:
+    def lexical_rows(
+        self, query: str, limit: int, collection_slug: str | None = None
+    ) -> list[sqlite3.Row]:
         fts_query = _fts_query(query)
         if not fts_query:
             return []
         with self.connect() as connection:
+            if collection_slug:
+                return list(
+                    connection.execute(
+                        """
+                        SELECT c.id, c.text, c.page, d.path, s.title,
+                               s.source_url, s.publisher, s.source_class, s.authority,
+                               bm25(chunks_fts) AS rank
+                        FROM chunks_fts
+                        JOIN chunks c ON c.id = chunks_fts.rowid
+                        JOIN documents d ON d.id = c.document_id
+                        JOIN source_documents sd ON sd.document_id = d.id
+                        JOIN sources s ON s.id = sd.source_id
+                        JOIN collections col ON col.id = s.collection_id
+                        WHERE chunks_fts MATCH ? AND col.slug = ?
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (fts_query, collection_slug, limit),
+                    )
+                )
             return list(
                 connection.execute(
                     """
-                    SELECT c.id, c.text, c.page, d.path, d.title, bm25(chunks_fts) AS rank
+                    SELECT c.id, c.text, c.page, d.path, d.title,
+                           NULL AS source_url, NULL AS publisher, NULL AS source_class,
+                           NULL AS authority, bm25(chunks_fts) AS rank
                     FROM chunks_fts
                     JOIN chunks c ON c.id = chunks_fts.rowid
                     JOIN documents d ON d.id = c.document_id
@@ -477,15 +505,33 @@ class LibraryDatabase:
                 )
             )
 
-    def embedded_rows(self) -> list[sqlite3.Row]:
+    def embedded_rows(self, collection_slug: str | None = None) -> list[sqlite3.Row]:
         if not self.path.exists():
             return []
         with self.connect() as connection:
+            if collection_slug:
+                return list(
+                    connection.execute(
+                        """
+                        SELECT c.id, c.text, c.page, c.embedding, c.embedding_dimensions,
+                               d.path, s.title, s.source_url, s.publisher,
+                               s.source_class, s.authority
+                        FROM chunks c
+                        JOIN documents d ON d.id = c.document_id
+                        JOIN source_documents sd ON sd.document_id = d.id
+                        JOIN sources s ON s.id = sd.source_id
+                        JOIN collections col ON col.id = s.collection_id
+                        WHERE c.embedding IS NOT NULL AND col.slug = ?
+                        """,
+                        (collection_slug,),
+                    )
+                )
             return list(
                 connection.execute(
                     """
                     SELECT c.id, c.text, c.page, c.embedding, c.embedding_dimensions,
-                           d.path, d.title
+                           d.path, d.title, NULL AS source_url, NULL AS publisher,
+                           NULL AS source_class, NULL AS authority
                     FROM chunks c
                     JOIN documents d ON d.id = c.document_id
                     WHERE c.embedding IS NOT NULL

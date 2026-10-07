@@ -32,10 +32,16 @@ class SearchResult:
     score: float
     lexical_rank: int | None = None
     semantic_rank: int | None = None
+    source_url: str | None = None
+    publisher: str | None = None
+    source_class: str | None = None
+    authority: str | None = None
 
     @property
     def location(self) -> str:
         suffix = f", page {self.page}" if self.page is not None else ""
+        if self.source_class:
+            return f"{self.title}{suffix}"
         return f"{self.path}{suffix}"
 
 

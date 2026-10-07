@@ -23,16 +23,17 @@ def search(
     embedder: QueryEmbedder | None = None,
     embedding_model: str | None = None,
     candidate_limit: int = 50,
+    collection_slug: str | None = None,
 ) -> list[SearchResult]:
     if limit < 1:
         raise ValueError("limit must be positive")
 
-    lexical = database.lexical_rows(query, candidate_limit)
+    lexical = database.lexical_rows(query, candidate_limit, collection_slug)
     semantic = []
     if embedder is not None and embedding_model is not None:
         query_vectors = embedder.embed([query], embedding_model)
         if query_vectors:
-            semantic = _semantic_rows(database, query_vectors[0], candidate_limit)
+            semantic = _semantic_rows(database, query_vectors[0], candidate_limit, collection_slug)
 
     rows_by_id = {int(row["id"]): row for row in lexical}
     rows_by_id.update({int(row["id"]): row for row, _score in semantic})
@@ -63,18 +64,27 @@ def search(
                 score=score,
                 lexical_rank=lexical_ranks.get(chunk_id),
                 semantic_rank=semantic_ranks.get(chunk_id),
+                source_url=row["source_url"],
+                publisher=row["publisher"],
+                source_class=row["source_class"],
+                authority=row["authority"],
             )
         )
     return results
 
 
-def _semantic_rows(database: LibraryDatabase, query_vector: list[float], limit: int):
+def _semantic_rows(
+    database: LibraryDatabase,
+    query_vector: list[float],
+    limit: int,
+    collection_slug: str | None,
+):
     query = np.asarray(query_vector, dtype=np.float32)
     query_norm = float(np.linalg.norm(query))
     if query_norm == 0:
         return []
     scored = []
-    for row in database.embedded_rows():
+    for row in database.embedded_rows(collection_slug):
         vector = decode_vector(row["embedding"], int(row["embedding_dimensions"]))
         if vector.size != query.size:
             continue
