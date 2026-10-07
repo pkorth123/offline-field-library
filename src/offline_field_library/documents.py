@@ -5,13 +5,14 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pymupdf
 
 from .models import Chunk, TextSection
 
-SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".rst"}
+SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".rst", ".html", ".htm"}
 
 
 def discover(paths: Iterable[Path]) -> list[Path]:
@@ -49,6 +50,10 @@ def extract(path: Path) -> list[TextSection]:
         return sections
 
     text = path.read_text(encoding="utf-8", errors="replace")
+    if suffix in {".html", ".htm"}:
+        parser = _HTMLTextExtractor()
+        parser.feed(text)
+        text = parser.text
     cleaned = _clean_text(text)
     return [TextSection(text=cleaned)] if cleaned else []
 
@@ -113,3 +118,63 @@ def _clean_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+class _HTMLTextExtractor(HTMLParser):
+    _SKIPPED = {"script", "style", "noscript", "svg"}
+    _BLOCKS = {
+        "article",
+        "blockquote",
+        "br",
+        "div",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "li",
+        "main",
+        "nav",
+        "p",
+        "section",
+        "table",
+        "td",
+        "th",
+        "tr",
+    }
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self._parts: list[str] = []
+
+    @property
+    def text(self) -> str:
+        return "".join(self._parts)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIPPED:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag in self._BLOCKS:
+            self._parts.append("\n")
+        if tag == "img":
+            alt = next((value for name, value in attrs if name == "alt" and value), None)
+            if alt:
+                self._parts.append(f"[Image: {alt}]")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIPPED and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if not self._skip_depth and tag in self._BLOCKS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self._parts.append(data)
