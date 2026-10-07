@@ -6,6 +6,12 @@ import pytest
 from offline_field_library.database import LibraryDatabase
 from offline_field_library.documents import extract
 from offline_field_library.packs import import_pack, load_manifest
+from offline_field_library.retrieval import search
+
+
+class FakeEmbedder:
+    def embed(self, texts, model):
+        return [[1.0, 0.25] for _text in texts]
 
 
 def _write_manifest(pack: Path, slug: str = "ridge-generator") -> None:
@@ -57,12 +63,14 @@ def test_pack_import_preserves_indexes_and_deduplicates_sources(tmp_path: Path) 
 
     first = import_pack(database, pack, embedder=None, embedding_model=None)
     second = import_pack(database, pack, embedder=None, embedding_model=None)
+    embedded = import_pack(database, pack, embedder=FakeEmbedder(), embedding_model="fake")
 
     assert first.indexed == 1
     assert first.preserved == 1
     assert first.remote_only == 1
     assert second.deduplicated == 2
-    assert database.counts() == (1, 1, 0)
+    assert embedded.indexed == 1
+    assert database.counts() == (1, 1, 1)
     assert database.list_collections()[0]["source_count"] == 3
     statuses = {row["source_key"]: row["index_status"] for row in database.list_sources(first.slug)}
     assert statuses == {
@@ -73,6 +81,15 @@ def test_pack_import_preserves_indexes_and_deduplicates_sources(tmp_path: Path) 
     assert len(list((database.library_dir / "objects").rglob("*.*"))) == 2
     assert (first.pack_path / "manifest.json").is_file()
     assert (first.pack_path / "report.md").is_file()
+    results = search(
+        database,
+        "lubrication schedule",
+        embedder=FakeEmbedder(),
+        embedding_model="fake",
+        collection_slug="ridge-generator",
+    )
+    assert results[0].semantic_rank == 1
+    assert results[0].authority == "official"
 
 
 def test_manifest_rejects_path_traversal(tmp_path: Path) -> None:

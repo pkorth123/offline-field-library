@@ -56,7 +56,7 @@ def ingest(
         str, typer.Option(help="Ollama embedding model.")
     ] = "nomic-embed-text",
     no_embeddings: Annotated[
-        bool, typer.Option(help="Build a keyword-only index without Ollama.")
+        bool, typer.Option("--no-embeddings", help="Build a keyword-only index without Ollama.")
     ] = False,
     chunk_chars: Annotated[
         int, typer.Option(min=100, help="Maximum characters per passage.")
@@ -95,7 +95,7 @@ def import_pack_command(
         str, typer.Option(help="Ollama embedding model.")
     ] = "nomic-embed-text",
     no_embeddings: Annotated[
-        bool, typer.Option(help="Build a keyword-only pack without Ollama.")
+        bool, typer.Option("--no-embeddings", help="Build a keyword-only pack without Ollama.")
     ] = False,
 ) -> None:
     """Validate and import a researched knowledge pack into the local library."""
@@ -179,7 +179,8 @@ def search(
     library: LibraryOption = Path(".field-library"),
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, max=50)] = 5,
     keyword_only: Annotated[
-        bool, typer.Option(help="Do not call the embedding model for this search.")
+        bool,
+        typer.Option("--keyword-only", help="Do not call the embedding model for this search."),
     ] = False,
     collection: CollectionOption = None,
 ) -> None:
@@ -211,7 +212,8 @@ def ask(
     model: Annotated[str, typer.Option(help="Ollama chat model.")] = "llama3.2:3b",
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, max=20)] = 5,
     keyword_only: Annotated[
-        bool, typer.Option(help="Retrieve by keywords without an embedding call.")
+        bool,
+        typer.Option("--keyword-only", help="Retrieve by keywords without an embedding call."),
     ] = False,
     collection: CollectionOption = None,
 ) -> None:
@@ -236,7 +238,8 @@ def chat(
     model: Annotated[str, typer.Option(help="Ollama chat model.")] = "llama3.2:3b",
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, max=20)] = 5,
     keyword_only: Annotated[
-        bool, typer.Option(help="Retrieve by keywords without an embedding call.")
+        bool,
+        typer.Option("--keyword-only", help="Retrieve by keywords without an embedding call."),
     ] = False,
     collection: CollectionOption = None,
 ) -> None:

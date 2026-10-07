@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gather Field Pack"
+  short_description: "Research and cache an offline knowledge pack"
+  default_prompt: "Use $gather-field-pack to research this topic and import a traceable pack for offline use."

@@ -1,16 +1,19 @@
 # Offline Field Library
 
-A private, offline-first library for field manuals, notes, and reference documents. It indexes
-PDF, plain-text, Markdown, and RST files into one portable SQLite database, searches them with a
-hybrid of keywords and local embeddings, and asks a local Ollama model to answer with source
-citations.
+A private, offline-first library for field manuals, notes, and researched reference collections.
+Codex can research a topic while connected and import a traceable knowledge pack; the local app
+then searches cached PDF, HTML, text, Markdown, and RST material and asks Ollama to answer with
+source citations.
 
 This is the first working MVP. Once Ollama and the models have been downloaded, normal ingestion,
 search, and chat do not require an internet connection.
 
 ## What works
 
-- Recursive ingestion of `.pdf`, `.txt`, `.md`, `.markdown`, and `.rst` files
+- A repo-local `gather-field-pack` Codex research workflow
+- Validated knowledge-pack manifests and collection-scoped offline chat
+- Deduplicated local copies of permitted source material and preserved images
+- Recursive ingestion of `.pdf`, `.html`, `.htm`, `.txt`, `.md`, `.markdown`, and `.rst` files
 - Page-aware PDF citations
 - Incremental updates: unchanged files are skipped by SHA-256 content hash
 - SQLite FTS5 keyword search with no model dependency
@@ -58,6 +61,44 @@ uv run offline-field-library chat
 Type `/exit` to leave chat. Every answer prints the retrieved file paths and PDF page numbers
 under `Sources`.
 
+## Research-assisted knowledge packs
+
+Open this repository in Codex and ask naturally, or invoke the repo-local skill explicitly:
+
+```text
+Use $gather-field-pack to gather information about using, maintaining, and repairing
+a Honda EU2200i generator for later offline use.
+```
+
+Codex researches public sources, prefers manufacturer and government material, caches permitted
+originals, creates a provenance manifest and coverage report, and imports the pack locally. The
+online researcher and offline database are deliberately separated: unrelated local-library content
+is not sent into public searches, and the Ollama chat does not silently use the internet.
+
+Inspect and use imported packs:
+
+```bash
+uv run offline-field-library collections
+uv run offline-field-library sources honda-eu2200i
+uv run offline-field-library search "oil change interval" --collection honda-eu2200i
+uv run offline-field-library ask "How do I prepare it for storage?" --collection honda-eu2200i
+uv run offline-field-library chat --collection honda-eu2200i
+```
+
+The first iteration uses Codex as the online research interface; the local application does not
+require an OpenAI API key. A future version can reuse the same manifest contract from an integrated
+API workflow.
+
+To assemble or import a pack manually, create a folder containing `manifest.json` and its cached
+sources, then run:
+
+```bash
+uv run offline-field-library import-pack ./my-staged-pack
+```
+
+The canonical manifest schema is documented in
+`.agents/skills/gather-field-pack/references/manifest-schema.md`.
+
 ## Keyword-only mode
 
 The core index and search work without Ollama. This is useful on a small device or while setting up
@@ -73,8 +114,10 @@ uv run offline-field-library ask "When is the radio check?" --keyword-only
 
 ## Library and model options
 
-The default index lives at `.field-library/index.sqlite3`. Select another portable library with
-`--library`, or set `OFL_LIBRARY` once for all commands:
+The default library lives under `.field-library/`. SQLite stores metadata, extracted passages,
+keyword indexes, and vectors. Deduplicated original files remain ordinary files under `objects/`,
+while collection manifests and research reports live under `packs/`. Select another local library
+with `--library`, or set `OFL_LIBRARY` once for all commands:
 
 ```bash
 export OFL_LIBRARY=/Volumes/FIELD/reference-library
@@ -107,27 +150,34 @@ Running `ingest` again updates changed files and skips unchanged ones.
 ## Architecture
 
 ```text
-PDF / text / Markdown / RST
-            |
-     extraction + cleanup
-            |
- page-aware overlapping passages
-            |
-    +-------+----------------+
-    |                        |
-SQLite FTS5              Ollama embeddings
-    |                        |
-    +---- reciprocal-rank ---+
-             fusion
-               |
-       top cited passages
-               |
-        local Ollama chat
+Public web + advanced research agent
+                 |
+    manifest + cached source files
+                 |
+   content-addressed local object store
+                 |
+  PDF / HTML / text / Markdown / RST
+                 |
+       extraction + cleanup
+                 |
+   page-aware overlapping passages
+                 |
+        +--------+----------------+
+        |                         |
+   SQLite FTS5               Ollama embeddings
+        |                         |
+        +----- reciprocal-rank ---+
+                  fusion
+                    |
+            top cited passages
+                    |
+             local Ollama chat
 ```
 
 - `documents.py` discovers files, extracts text, and creates deterministic overlapping passages.
 - `ingestion.py` hashes inputs, batches embeddings, and atomically replaces each changed document.
-- `database.py` owns the SQLite schema, FTS5 index, metadata, and compact float32 vector storage.
+- `packs.py` validates manifests, preserves sources, deduplicates objects, and imports collections.
+- `database.py` owns collections, provenance, FTS5, metadata, and compact float32 vector storage.
 - `retrieval.py` performs keyword search and exact cosine similarity, then combines their ranks.
 - `rag.py` builds the grounded prompt and stable numbered source map.
 - `cli.py` exposes initialization, ingestion, status, search, ask, and chat workflows.
@@ -157,5 +207,8 @@ uv run offline-field-library search "hybrid ranking" --library /tmp/ofl-demo --k
 - Scanned/image-only PDFs need OCR before ingestion.
 - Deleting a source file does not yet remove its prior index entry.
 - Semantic search scans all stored vectors, so very large corpora will need an ANN index.
+- URL-only research sources are recorded but cannot be opened offline.
+- Standalone images are preserved and cited but are not yet interpreted by the local text model.
+- The research workflow runs through Codex rather than a one-button application screen.
 - Answers are grounded by prompting and citations, but local model quality still varies. Verify
   critical field decisions against the cited source document.
