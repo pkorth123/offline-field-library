@@ -1,0 +1,34 @@
+[project]
+name = "offline-field-library"
+version = "0.1.0"
+description = "A private, offline-first document library with local search and cited chat"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "ollama>=0.6.2",
+    "pymupdf>=1.28.2",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+offline-field-library = "offline_field_library:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[build-system]
+requires = ["uv_build>=0.12.12,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
